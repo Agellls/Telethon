@@ -1,0 +1,8 @@
+.git
+.env
+.gitignore
+downloads
+*.pyc
+__pycache__
+.DS_Store
+session

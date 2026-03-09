@@ -1,0 +1,15 @@
+version: "3.8"
+
+services:
+  telethon:
+    build: .
+    environment:
+      - API_ID=${API_ID}
+      - API_HASH=${API_HASH}
+      - SOURCE_CHAT=${SOURCE_CHAT}
+      - TARGET_GROUP=${TARGET_GROUP}
+    volumes:
+      - ./downloads:/app/downloads
+      - ./session:/app # Persist Telethon session
+    restart: unless-stopped
+    container_name: telethon-resend
