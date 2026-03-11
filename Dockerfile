@@ -12,9 +12,14 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy application files
 COPY main.py .
+COPY login.py .
+COPY start-northflank.sh .
+
+# Make startup script executable
+RUN chmod +x /app/start-northflank.sh
 
 # Create downloads directory
 RUN mkdir -p downloads
 
-# Run the application
-CMD ["python", "main.py"]
+# Run via startup script untuk better error handling
+CMD ["/app/start-northflank.sh"]

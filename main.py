@@ -1,7 +1,9 @@
 import os
 import asyncio
 import sys
+import signal
 import logging
+import time
 from telethon import TelegramClient, events
 from telethon.errors import FloodWaitError
 
@@ -18,6 +20,9 @@ logger = logging.getLogger(__name__)
 # Disable stdout buffering for Northflank
 sys.stdout.reconfigure(line_buffering=True) if hasattr(sys.stdout, 'reconfigure') else None
 
+# ===== GLOBAL STATE =====
+is_shutting_down = False
+
 # ===== ENV VALIDATION =====
 logger.info("🔍 Validating environment variables...")
 required_env = ["API_ID", "API_HASH", "SOURCE_CHAT", "TARGET_GROUP"]
@@ -33,12 +38,15 @@ logger.info("✅ All environment variables valid!")
 
 # ===== CHECK SESSION =====
 logger.info("🔐 Checking Telegram session...")
-if not os.path.exists("session.session"):
+session_file = "session.session"
+if not os.path.exists(session_file):
     logger.error("❌ Session file not found!")
-    logger.error("❌ Run 'python login.py' first to authenticate")
+    logger.error(f"❌ Expected location: {os.path.abspath(session_file)}")
+    logger.error("❌ Anda belum login - Run 'python login.py' first to authenticate")
+    logger.error("❌ Untuk Northflank: Upload session.session pertama kali via persistent storage")
     sys.exit(1)
 
-logger.info("✅ Session file found!")
+logger.info(f"✅ Session file found at {os.path.abspath(session_file)}")
 
 # ===== CONFIG =====
 api_id = int(os.getenv("API_ID"))
@@ -107,23 +115,106 @@ async def handler(event):
 
 
 # ===== START =====
-if __name__ == "__main__":
-    try:
-        logger.info("🚀 Starting Telegram client...")
-        logger.info("📱 Connecting to Telegram...")
-        
-        client.start()
-        
-        logger.info("✅ Connected to Telegram!")
-        logger.info("👂 Listening for new messages...")
-        logger.info(f"📨 Forwarding messages from chat {source_chat} to {target_group}")
-        
-        # Keep the client running
-        client.run_until_disconnected()
-        
-    except Exception as e:
-        logger.error(f"❌ Fatal error: {e}", exc_info=True)
+async def keep_alive():
+    """Keep-alive ping untuk prevent idle di Northflank"""
+    while not is_shutting_down:
+        try:
+            await asyncio.sleep(300)  # Ping setiap 5 menit
+            if client.is_connected():
+                logger.debug("💓 Keep-alive ping sent")
+        except Exception as e:
+            logger.warning(f"⚠️ Keep-alive error: {e}")
+
+
+def signal_handler(sig, frame):
+    """Handle graceful shutdown"""
+    global is_shutting_down
+    is_shutting_down = True
+    logger.info("🛑 Shutdown signal received...")
+    sys.exit(0)
+
+
+async def main_loop():
+    """Main bot loop dengan retry logic"""
+    global is_shutting_down
+    max_retries = 5
+    retry_count = 0
+    last_retry_time = 0
+    
+    while not is_shutting_down and retry_count < max_retries:
+        try:
+            logger.info("🚀 Starting Telegram client...")
+            logger.info("📱 Connecting to Telegram...")
+            
+            # Start client
+            await client.connect()
+            if not await client.is_user_authorized():
+                logger.error("❌ User not authorized - session invalid")
+                logger.error("❌ Run 'python login.py' to re-authenticate")
+                sys.exit(1)
+            
+            logger.info("✅ Connected to Telegram!")
+            logger.info("👂 Listening for new messages...")
+            logger.info(f"📨 Forwarding messages from chat {source_chat} to {target_group}")
+            
+            # Reset retry count on successful connection
+            retry_count = 0
+            
+            # Keep alive task
+            keep_alive_task = asyncio.create_task(keep_alive())
+            
+            # Wait for disconnection
+            await client.run_until_disconnected()
+            
+            keep_alive_task.cancel()
+            
+        except ConnectionError as e:
+            retry_count += 1
+            wait_time = min(2 ** retry_count, 60)  # Exponential backoff, max 60s
+            logger.error(f"❌ Connection error: {e}")
+            logger.info(f"🔄 Retry {retry_count}/{max_retries} dalam {wait_time}s...")
+            
+            last_retry_time = time.time()
+            await asyncio.sleep(wait_time)
+            
+        except asyncio.CancelledError:
+            logger.info("🛑 Task cancelled - shutting down gracefully")
+            break
+            
+        except Exception as e:
+            retry_count += 1
+            wait_time = min(2 ** retry_count, 60)
+            logger.error(f"❌ Fatal error: {e}", exc_info=True)
+            logger.info(f"🔄 Retry {retry_count}/{max_retries} dalam {wait_time}s...")
+            
+            last_retry_time = time.time()
+            await asyncio.sleep(wait_time)
+    
+    if retry_count >= max_retries:
+        logger.error(f"❌ Max retries ({max_retries}) exceeded - giving up")
         sys.exit(1)
+
+
+if __name__ == "__main__":
+    # Setup signal handlers untuk graceful shutdown
+    signal.signal(signal.SIGINT, signal_handler)
+    signal.signal(signal.SIGTERM, signal_handler)
+    
+    try:
+        logger.info("=" * 50)
+        logger.info("🎯 TELETHON RESEND BOT - STARTING")
+        logger.info("=" * 50)
+        
+        # Run main loop
+        asyncio.run(main_loop())
+        
+    except KeyboardInterrupt:
+        logger.info("🛑 Interrupted by user")
+        sys.exit(0)
     finally:
-        logger.info("🛑 Shutting down...")
-        client.disconnect()
+        is_shutting_down = True
+        logger.info("=" * 50)
+        logger.info("🛑 Bot shutdown complete")
+        logger.info("=" * 50)
+        if client.is_connected():
+            client.disconnect()
