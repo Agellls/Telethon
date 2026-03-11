@@ -1,25 +1,20 @@
+# Use Python 3.11 slim image
 FROM python:3.11-slim
 
+# Set working directory
 WORKDIR /app
 
-# Set environment variables for proper logging
-ENV PYTHONUNBUFFERED=1
-ENV PYTHONDONTWRITEBYTECODE=1
-
-# Copy requirements and install dependencies
+# Copy requirements first for better caching
 COPY requirements.txt .
+
+# Install dependencies
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy application files
+# Copy application code
 COPY main.py .
-COPY login.py .
-COPY start-northflank.sh .
 
-# Make startup script executable
-RUN chmod +x /app/start-northflank.sh
+# Create download directory
+RUN mkdir -p /app/downloads
 
-# Create downloads directory
-RUN mkdir -p downloads
-
-# Run via startup script untuk better error handling
-CMD ["/app/start-northflank.sh"]
+# Run the application
+CMD ["python", "main.py"]

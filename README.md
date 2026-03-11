@@ -1,154 +1,158 @@
-# Telethon Resend - Docker Setup
+# Telethon Forwarder - Northflank Deployment
 
-Telegram message forwarding bot dengan Docker support.
+Aplikasi untuk forward pesan dan media dari satu Telegram chat ke chat lain.
 
-## ✅ Requirements
+## Prerequisites
 
-- Docker & Docker Compose installed (untuk local)
-- Northflank / Cloud hosting dengan SSH access
-- `.env` file dengan credentials yang valid
+- Telegram API credentials (api_id dan api_hash dari https://my.telegram.org)
+- Chat ID untuk source dan target
 
-## 🚀 Quick Start
+## Setup Lokal
 
-### 1. Setup Environment Variables
+### 1. Install Dependencies
+
+```bash
+pip install -r requirements.txt
+```
+
+### 2. Setup Environment Variables
+
+Copy `.env.example` ke `.env`:
 
 ```bash
 cp .env.example .env
 ```
 
-Edit `.env` dan isi dengan:
+Edit `.env` dengan credentials Anda:
 
-- `API_ID` - Telegram API ID
-- `API_HASH` - Telegram API Hash
-- `SOURCE_CHAT` - ID chat sumber (harus follow bot)
-- `TARGET_GROUP` - ID grup target untuk forward
-
-### 2. Local Setup (Docker)
-
-**Linux/Mac:**
-
-```bash
-chmod +x start.sh
-./start.sh
+```env
+TELEGRAM_API_ID=your_api_id
+TELEGRAM_API_HASH=your_api_hash
+SOURCE_CHAT_ID=-1001857184829
+TARGET_GROUP_ID=-5192815181
+DOWNLOAD_DIR=downloads
 ```
 
-**Windows:**
-
-```bash
-start.bat
-```
-
-Atau langsung:
-
-```bash
-docker-compose up --build
-```
-
-### 3. Northflank Setup (Cloud SSH)
-
-#### Step 1: Set Environment Variables di Northflank Dashboard
-
-- API_ID
-- API_HASH
-- SOURCE_CHAT
-- TARGET_GROUP
-
-#### Step 2: Login via SSH
-
-```bash
-# Connect ke Northflank SSH shell
-```
-
-#### Step 3: Run Login Script (FIRST TIME ONLY)
-
-```bash
-python login.py
-```
-
-- Pilih method login: QR Code atau Phone Number
-- Complete authentication
-- Session akan tersimpan otomatis
-
-#### Step 4: Restart Container atau Run Bot
+### 3. Jalankan Aplikasi
 
 ```bash
 python main.py
 ```
 
-Bot akan start listening untuk pesan baru.
+## Deployment ke Northflank
 
----
+### Option 1: Deploy via Git (Recommended)
 
-## 📁 File Structure
+1. **Push ke GitHub/GitLab**
+
+   ```bash
+   git init
+   git add .
+   git commit -m "Initial commit"
+   git push origin main
+   ```
+
+2. **Di Northflank Dashboard:**
+   - Create new Service
+   - Pilih "Source Code" > GitHub/GitLab
+   - Select repository
+   - Build Type: Docker
+   - Dockerfile: Gunakan default (Dockerfile di root)
+
+3. **Set Environment Variables:**
+   - Di Service settings, tambahkan:
+     - `TELEGRAM_API_ID` = your_id
+     - `TELEGRAM_API_HASH` = your_hash
+     - `SOURCE_CHAT_ID` = chat_id
+     - `TARGET_GROUP_ID` = group_id
+     - `DOWNLOAD_DIR` = downloads
+
+### Option 2: Deploy via Docker Image
+
+1. **Build Docker image lokal:**
+
+   ```bash
+   docker build -t telethon-forwarder .
+   ```
+
+2. **Test lokal dengan docker-compose:**
+
+   ```bash
+   docker-compose up
+   ```
+
+3. **Push ke Docker registry (Docker Hub/GitHub Container Registry):**
+
+   ```bash
+   docker tag telethon-forwarder yourusername/telethon-forwarder
+   docker push yourusername/telethon-forwarder
+   ```
+
+4. **Di Northflank, gunakan image URL**
+
+## Struktur File
 
 ```
 .
-├── main.py             # Main bot application
-├── login.py            # Interactive login script (RUN FIRST)
-├── requirements.txt    # Python dependencies
-├── Dockerfile          # Docker container config
-├── docker-compose.yml  # Compose orchestration
-├── .dockerignore       # Files to exclude from build
-├── .env.example        # Environment template
-├── start.sh            # Linux/Mac startup script
-├── start.bat           # Windows startup script
-├── downloads/          # Downloaded media folder
-└── session.session     # Telethon session (created by login.py)
+├── main.py              # Main application
+├── requirements.txt     # Python dependencies
+├── Dockerfile          # Docker configuration
+├── .dockerignore        # Files to exclude from Docker build
+├── .env.example         # Environment variables template
+├── northflank.json      # Northflank configuration (optional)
+└── downloads/           # Directory untuk downloaded media
 ```
 
----
+## Environment Variables
 
-## 🔧 Troubleshooting
+| Variable          | Description                       | Required                   |
+| ----------------- | --------------------------------- | -------------------------- |
+| TELEGRAM_API_ID   | Telegram API ID                   | ✅ Yes                     |
+| TELEGRAM_API_HASH | Telegram API Hash                 | ✅ Yes                     |
+| SOURCE_CHAT_ID    | Source chat ID (negative number)  | ✅ Yes                     |
+| TARGET_GROUP_ID   | Target group ID (negative number) | ✅ Yes                     |
+| DOWNLOAD_DIR      | Directory untuk download media    | ❌ No (default: downloads) |
 
-### Container tidak start:
+## Important Notes
 
-- Pastikan semua environment variables sudah diset
-- Check Docker & Docker Compose terinstall
+⚠️ **Session Management**
 
-### Environment variables error:
+- Aplikasi akan membuat file `session` saat pertama kali run
+- Di Northflank, gunakan persistent volumes untuk folder session:
+  - Mount path: `/app/session`
+  - Atau copy session file secara manual
 
-- Pastikan semua 4 variables di `.env`: `API_ID`, `API_HASH`, `SOURCE_CHAT`, `TARGET_GROUP`
-- Tidak boleh ada spasi extra di `.env`
+⚠️ **Storage**
 
-### Bot tidak listening (Northflank):
+- Download directory harus persistent jika menggunakan Northflank
+- Gunakan Cloud Storage (S3, GCS, dll) untuk file jangka panjang
+- Update code untuk upload ke cloud storage sebelum delete lokal
 
-1. Check session file ada: `ls -la session*`
-2. Jika tidak ada → run `python login.py` dulu
-3. Kemudian `python main.py`
+⚠️ **Rate Limiting**
 
-### FloodWait Error:
+- Bot sudah handle FloodWaitError
+- Jangan spam messages terlalu cepat
 
-- Bot akan auto pause sesuai durasi yang diminta Telegram
-- Normal behavior, tunggu selesai
+## Troubleshooting
 
-### "Session file not found" error:
+### "Session" file missing
 
-- Meaning: Belum login ke Telegram
-- Solution: Run `python login.py` terlebih dahulu via SSH
+- Jalankan lokal dulu dengan akun Telegram untuk generate session
+- Atau set Northflank untuk prompt login
 
----
+### Media download fails
 
-## 📝 Manual Docker Commands
+- Pastikan disk space cukup
+- Check network connectivity
+- Verify akses ke source chat
 
-Build image:
+### Heap out of memory
 
-```bash
-docker build -t telethon-resend .
-```
+- Reduce media file size limit
+- Implement streaming upload ke cloud storage
+- Increase Northflank memory allocation
 
-Run container dengan env:
+## Support
 
-```bash
-docker run -it --env-file .env \
-  -v $(pwd)/downloads:/app/downloads \
-  telethon-resend
-```
-
----
-
-## 💾 Notes
-
-- Session Telethon disimpan di file `session.session` (persistent across restarts)
-- Downloads disimpan di `downloads` folder
-- Container akan auto-restart jika crash (unless-stopped policy)
-- Login hanya perlu 1x saja, session tersimpan permanent
+Untuk lebih info tentang Northflank: https://northflank.com/docs
+Untuk Telethon: https://docs.telethon.dev/
