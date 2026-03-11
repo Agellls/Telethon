@@ -26,10 +26,8 @@ cp .env.example .env
 Edit `.env` dengan credentials Anda:
 
 ```env
-TELEGRAM_API_ID=your_api_id
-TELEGRAM_API_HASH=your_api_hash
-SOURCE_CHAT_ID=-1001857184829
-TARGET_GROUP_ID=-5192815181
+API_ID=your_api_id
+API_HASH=your_api_hash
 DOWNLOAD_DIR=downloads
 ```
 
@@ -37,6 +35,13 @@ DOWNLOAD_DIR=downloads
 
 ```bash
 python main.py
+```
+
+Aplikasi akan prompt input:
+
+```
+Enter source chat ID: -1001857184829
+Enter target group ID: -5192815181
 ```
 
 ## Deployment ke Northflank
@@ -61,11 +66,17 @@ python main.py
 
 3. **Set Environment Variables:**
    - Di Service settings, tambahkan:
-     - `TELEGRAM_API_ID` = your_id
-     - `TELEGRAM_API_HASH` = your_hash
-     - `SOURCE_CHAT_ID` = chat_id
-     - `TARGET_GROUP_ID` = group_id
+     - `API_ID` = your_id
+     - `API_HASH` = your_hash
      - `DOWNLOAD_DIR` = downloads
+4. **Run and Input Chat IDs:**
+   - Deploy service
+   - Buka Shell di Northflank dashboard
+   - Aplikasi akan prompt untuk input:
+     ```
+     Enter source chat ID: [input your source chat ID]
+     Enter target group ID: [input your target group ID]
+     ```
 
 ### Option 2: Deploy via Docker Image
 
@@ -105,22 +116,26 @@ python main.py
 
 ## Environment Variables
 
-| Variable          | Description                       | Required                   |
-| ----------------- | --------------------------------- | -------------------------- |
-| TELEGRAM_API_ID   | Telegram API ID                   | ✅ Yes                     |
-| TELEGRAM_API_HASH | Telegram API Hash                 | ✅ Yes                     |
-| SOURCE_CHAT_ID    | Source chat ID (negative number)  | ✅ Yes                     |
-| TARGET_GROUP_ID   | Target group ID (negative number) | ✅ Yes                     |
-| DOWNLOAD_DIR      | Directory untuk download media    | ❌ No (default: downloads) |
+| Variable     | Description                    | Required                   |
+| ------------ | ------------------------------ | -------------------------- |
+| API_ID       | Telegram API ID                | ✅ Yes                     |
+| API_HASH     | Telegram API Hash              | ✅ Yes                     |
+| DOWNLOAD_DIR | Directory untuk download media | ❌ No (default: downloads) |
+
+**Note:** Source dan Target chat IDs di-input secara manual saat aplikasi dijalankan.
 
 ## Important Notes
 
 ⚠️ **Session Management**
 
-- Aplikasi akan membuat file `session` saat pertama kali run
-- Di Northflank, gunakan persistent volumes untuk folder session:
-  - Mount path: `/app/session`
-  - Atau copy session file secara manual
+- Aplikasi akan membuat file `session` saat pertama kali login via Telegram
+- Di Northflank, jalankan via Shell untuk melakukan login interaktif:
+  1. Buka Shell di service
+  2. Jalankan `python main.py`
+  3. Input chat IDs sesuai prompt
+  4. Scan QR code atau input phone number untuk login Telegram
+  5. Setelah login sekali, app bisa restart tanpa perlu login lagi (session tersimpan)
+- Mount `/app/session` sebagai persistent volume agar session tetap ada
 
 ⚠️ **Storage**
 

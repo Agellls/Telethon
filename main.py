@@ -7,10 +7,11 @@ from telethon.errors import FloodWaitError
 api_id = int(os.getenv("API_ID"))
 api_hash = os.getenv("API_HASH")
 
-source_chat = int(os.getenv("SOURCE_CHAT"))
-target_group = int(os.getenv("TARGET_GROUP"))
-
 DOWNLOAD_DIR = os.getenv("DOWNLOAD_DIR", "downloads")
+
+# Prompt for chat IDs on startup
+source_chat = int(input("Enter source chat ID: "))
+target_group = int(input("Enter target group ID: "))
 
 # ===== CLIENT =====
 client = TelegramClient("session", api_id, api_hash)
