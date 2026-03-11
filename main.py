@@ -7,8 +7,8 @@ from telethon.errors import FloodWaitError
 api_id = int(os.getenv("API_ID"))
 api_hash = os.getenv("API_HASH")
 
-source_chat = int(os.getenv("SOURCE_CHAT_ID"))
-target_group = int(os.getenv("TARGET_GROUP_ID"))
+source_chat = int(os.getenv("SOURCE_CHAT"))
+target_group = int(os.getenv("TARGET_GROUP"))
 
 DOWNLOAD_DIR = os.getenv("DOWNLOAD_DIR", "downloads")
 
